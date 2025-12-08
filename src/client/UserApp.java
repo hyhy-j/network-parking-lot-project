@@ -210,7 +210,7 @@ public class UserApp extends JFrame {
             System.exit(0);
         } else {
             chatArea.append("[Me] " + input + "\n");
-            // os.println(input); // 필요 시 주석 해제
+            os.println(input); // 필요 시 주석 해제
         }
         inputField.setText("");
     }
@@ -221,7 +221,7 @@ public class UserApp extends JFrame {
 
         public ReceiveThread(Socket socket) {
             try {
-                this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -235,70 +235,65 @@ public class UserApp extends JFrame {
                     String msg = line;
 
                     SwingUtilities.invokeLater(() -> {
-                        // 1. 로그창에 출력 (출차 패널에 있을 때만 보임)
-                        if (chatArea != null) {
-                            chatArea.append("[Server] " + msg + "\n");
-                            chatArea.setCaretPosition(chatArea.getDocument().getLength());
-                        }
+                        // [수정 2] 순서 변경!
+                        // 먼저 특수 메시지인지 확인하고, 맞다면 처리 후 'return'해서 채팅창 출력을 막습니다.
 
-                        // 길 안내 로그 (길 안내 화면용)
-                        // NAV:COORD:10,20 형태의 메시지가 오면 파싱해서 출력
+                        // 1. 길 안내 좌표 데이터 처리
                         if (msg.startsWith(Protocol.NAV_COORD)) {
-                            String coords = msg.split(":")[2]; // "10,20" 추출
+                            String coords = msg.split(":")[2];
                             if (navLogArea != null) {
                                 navLogArea.append("🚗 자율 주행 중... 현재 좌표: (" + coords + ")\n");
                                 navLogArea.setCaretPosition(navLogArea.getDocument().getLength());
                             }
+                            return; // ★ 여기서 끝내야 아래 채팅창(chatArea)에 안 뜹니다.
                         }
-                        // 도착 메시지 처리
-                        else if (msg.equals(Protocol.NAV_END)) {
+
+                        // 2. 도착 메시지 처리
+                        if (msg.equals(Protocol.NAV_END)) {
                             if (navLogArea != null) {
                                 navLogArea.append("🏁 목적지에 도착하여 주차를 완료했습니다.\n");
-                                JOptionPane.showMessageDialog(UserApp.this, "주차가 완료되었습니다!");
                             }
-                        }
-                        // 그 외 일반 메시지는 로그창에 띄움
-                        else if (!msg.startsWith(Protocol.LOGIN_USER) && navLogArea != null) {
-                            // (서버가 보내는 일반 텍스트 메시지도 길안내 로그에 표시)
-                            // 단, LPR 관련 메시지 등은 제외하고 싶으면 조건 추가 가능
-                            if(!msg.startsWith("NOTI:")) {
-                                navLogArea.append(msg + "\n");
-                            }
+                            JOptionPane.showMessageDialog(UserApp.this, "주차가 완료되었습니다!");
+                            return; // ★ 여기서 끝냄
                         }
 
-                        // 2. 결제 완료 처리 (화면이 어디에 있든 팝업은 떠야 함)
-                        // [수정된 부분] 결제 신호 수신 시 바로 완료 처리하지 않고, 선택창을 띄움
+                        // 3. 결제 완료 처리
                         if (msg.equals(Protocol.MSG_PAYMENT)) {
-                            // 1. 사용자에게 결제 방식 물어보기 (팝업창)
                             int choice = JOptionPane.showOptionDialog(
                                     UserApp.this,
-                                    "출차 차량이 감지되었습니다.\n등록된 '자동 결제' 수단으로 결제하시겠습니까?", // 내용
-                                    "결제 방식 선택", // 제목
-                                    JOptionPane.YES_NO_OPTION, // 버튼 종류 (예/아니오)
-                                    JOptionPane.QUESTION_MESSAGE, // 아이콘 모양
+                                    "출차 차량이 감지되었습니다.\n등록된 '자동 결제' 수단으로 결제하시겠습니까?",
+                                    "결제 방식 선택",
+                                    JOptionPane.YES_NO_OPTION,
+                                    JOptionPane.QUESTION_MESSAGE,
                                     null,
-                                    new Object[]{"예 (자동 결제)", "아니오 (다른 수단)"}, // 버튼 글자 커스텀
-                                    "예 (자동 결제)" // 기본 선택값
+                                    new Object[]{"예 (자동 결제)", "아니오 (다른 수단)"},
+                                    "예 (자동 결제)"
                             );
 
-                            // 2. 선택에 따른 처리
                             if (choice == JOptionPane.YES_OPTION) {
-                                // [자동 결제 선택 시]
-                                // 실제로는 여기서 서버에 "자동결제 진행해줘"라는 패킷을 보내야 하지만,
-                                // 지금은 완료되었다고 가정하고 메시지를 띄웁니다.
                                 JOptionPane.showMessageDialog(UserApp.this,
                                         "등록된 카드로 결제가 완료되었습니다.\n안녕히 가십시오 (출차 가능)",
                                         "결제 성공",
                                         JOptionPane.INFORMATION_MESSAGE);
-
                             } else {
-                                // [다른 수단 선택 시]
-                                // 현장 결제나 다른 앱 결제를 유도하는 메시지
                                 JOptionPane.showMessageDialog(UserApp.this,
                                         "자동 결제가 취소되었습니다.\n출구 정산기에서 직접 결제해주세요.",
                                         "일반 결제 전환",
                                         JOptionPane.WARNING_MESSAGE);
                             }
+                            return; // ★ 결제 알림도 채팅창에는 안 뜨게 처리 (원하면 지워도 됨)
+                        }
+
+                        // 4. [최종 출력] 위에서 걸러지지 않은 "일반 대화"나 "서버 공지"만 채팅창에 표시
+                        //    (로그인 메시지 등 시스템 메시지도 필요하면 여기서 필터링 가능)
+                        if (chatArea != null && !msg.startsWith(Protocol.LOGIN_USER)) {
+                            chatArea.append("[Server] " + msg + "\n");
+                            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+                        }
+
+                        // (선택 사항) 일반 채팅도 길안내 로그에 같이 보여주고 싶다면 아래 코드 유지
+                        if (navLogArea != null && !msg.startsWith(Protocol.LOGIN_USER) && !msg.startsWith("NOTI:")) {
+                            navLogArea.append(msg + "\n");
                         }
                     });
                 }

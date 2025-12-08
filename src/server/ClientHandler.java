@@ -1,8 +1,6 @@
 package server;
 
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.io.PrintStream;
+import java.io.*;
 import java.net.Socket;
 import utils.Protocol;
 
@@ -10,7 +8,7 @@ public class ClientHandler extends Thread {
     private String role = null;    // 역할: "LPR" 또는 "USER"
     private String carNum = null;  // 유저일 경우 차량 번호
 
-    private DataInputStream is = null;
+    private BufferedReader reader = null;
     private PrintStream os = null;
     private Socket clientSocket = null;
     private final ClientHandler[] threads; // 전체 접속자 관리용 배열 참조
@@ -28,11 +26,11 @@ public class ClientHandler extends Thread {
 
         try {
             // 입출력 스트림 생성
-            is = new DataInputStream(clientSocket.getInputStream());
-            os = new PrintStream(clientSocket.getOutputStream());
+            reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), "UTF-8"));
+            os = new PrintStream(clientSocket.getOutputStream(), true, "UTF-8");
 
             // 1. 로그인 (Handshake) 처리
-            String loginMsg = is.readLine();
+            String loginMsg = reader.readLine();
             if (loginMsg == null) return; // 바로 끊긴 경우
             loginMsg = loginMsg.trim();
 
@@ -59,7 +57,7 @@ public class ClientHandler extends Thread {
 
             // 2. 메시지 수신 및 처리 루프
             while (true) {
-                String line = is.readLine();
+                String line = reader.readLine();
 
                 // 연결이 끊어지거나 종료 명령 수신 시 루프 탈출
                 if (line == null || line.startsWith(Protocol.CMD_EXIT)) {
@@ -140,7 +138,7 @@ public class ClientHandler extends Thread {
 
             // 소켓 및 스트림 닫기
             try {
-                if (is != null) is.close();
+                if (reader != null) reader.close();
                 if (os != null) os.close();
                 if (clientSocket != null) clientSocket.close();
             } catch (IOException e) {
