@@ -10,11 +10,10 @@ import utils.Protocol;
 
 public class LPRCamera {
 
-    // LPR은 주로 보내기만 하므로 수신 로직은 간단히 처리
     static class ServerListener extends Thread {
         BufferedReader reader;
         public ServerListener(Socket s) throws IOException {
-            reader = new BufferedReader(new InputStreamReader(s.getInputStream()));
+            reader = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"));
         }
         public void run() {
             try {
@@ -27,30 +26,28 @@ public class LPRCamera {
     }
 
     public static void main(String[] args) {
-        String host = "10.101.48.65";
+        String host = "172.20.62.10"; // 서버 IP 확인
         int port = 8888;
         Scanner sc = new Scanner(System.in);
 
-        System.out.println("=== LPR Camera Simulator (IoT) ===");
+        System.out.println("=== 📷 LPR Camera Simulator (In/Out) ===");
+        System.out.println("사용법:");
+        System.out.println(" - 입차: in [차량번호]  (예: in 1234)");
+        System.out.println(" - 출차: out [차량번호] (예: out 1234)");
+        System.out.println(" - 종료: /quit");
 
         try {
             Socket socket = new Socket(host, port);
-            PrintStream os = new PrintStream(socket.getOutputStream());
+            PrintStream os = new PrintStream(socket.getOutputStream(), true, "UTF-8");
 
-            // 서버 응답 듣는 리스너 시작
             new ServerListener(socket).start();
 
-            // 1. LPR 로그인 전송
-            System.out.println("Connecting to server as LPR Camera...");
+            // LPR 로그인
             os.println(Protocol.LOGIN_LPR);
 
-            System.out.println("Ready. Type car number to simulate detection (e.g., 1234)");
-            System.out.println("Type '/quit' to exit.");
-
-            // 2. 사용자 입력으로 차량 인식 시뮬레이션
             while (true) {
-                System.out.print("Detected Car Number > ");
-                String input = sc.nextLine();
+                System.out.print("Command > ");
+                String input = sc.nextLine().trim();
 
                 if (input.equalsIgnoreCase("/quit")) {
                     os.println(Protocol.CMD_EXIT);
@@ -58,11 +55,28 @@ public class LPRCamera {
                 }
 
                 if (!input.isEmpty()) {
-                    // 서버로 "DETECT:차번호" 전송
-                    os.println(Protocol.DETECT_CAR + input);
+                    // 입력값 파싱 (in 1234 -> type=in, car=1234)
+                    String[] parts = input.split(" ");
+                    if (parts.length < 2) {
+                        System.out.println("형식이 잘못되었습니다. (예: in 1234)");
+                        continue;
+                    }
+                    String type = parts[0];
+                    String carNum = parts[1];
+
+                    if (type.equalsIgnoreCase("in")) {
+                        // 입차 신호 (프로토콜: LPR_IN:차번호)
+                        os.println("LPR_IN:" + carNum);
+                        System.out.println("[전송] 입차 -> " + carNum);
+                    } else if (type.equalsIgnoreCase("out")) {
+                        // 출차 신호 (프로토콜: LPR_OUT:차번호)
+                        os.println("LPR_OUT:" + carNum);
+                        System.out.println("[전송] 출차 -> " + carNum);
+                    } else {
+                        System.out.println("알 수 없는 명령어입니다.");
+                    }
                 }
             }
-
             socket.close();
             sc.close();
         } catch (IOException e) {
