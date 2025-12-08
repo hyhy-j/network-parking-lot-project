@@ -2,7 +2,6 @@ package client;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -13,27 +12,29 @@ import utils.Protocol;
 
 public class UserApp extends JFrame {
 
-    // 화면 전환을 위한 CardLayout 관리 변수
+    // 화면 전환을 위한 CardLayout
     private CardLayout cardLayout;
-    private JPanel mainContainer; // 모든 화면을 담을 그릇
+    private JPanel mainContainer;
 
-    // 네트워크 관련 변수
+    // 네트워크 변수
     private Socket socket;
     private PrintStream os;
     private String myCarNum;
 
-    // 로그 표시용 컴포넌트
+    // UI 컴포넌트
     private JTextArea chatArea;
     private JTextField inputField;
 
+    // ★ [핵심] 결제 상태 플래그 (채팅 입력 시 결제 응답인지 확인용)
+    private boolean isWaitingForPayment = false;
+
     public UserApp() {
-        // 1. 윈도우 기본 설정
         setTitle("Smart Parking System - Client");
         setSize(700, 500);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLocationRelativeTo(null); // 화면 가운데 띄우기
+        setLocationRelativeTo(null);
 
-        // 2. 로그인 (차량 번호 입력)
+        // 1. 로그인
         myCarNum = JOptionPane.showInputDialog(this,
                 "차량 번호를 입력하세요:\n(1000~1999: 교수 / 2000~2999: 학생 / 그외: 방문객)",
                 "주차 시스템 로그인", JOptionPane.QUESTION_MESSAGE);
@@ -42,38 +43,41 @@ public class UserApp extends JFrame {
             System.exit(0);
         }
 
-        // 3. 서버 연결 시도
+        // 2. 서버 연결
         connectToServer();
 
-        // 4. 화면 구성 (CardLayout 적용)
+        // 3. UI 구성
         cardLayout = new CardLayout();
         mainContainer = new JPanel(cardLayout);
 
-        // [변경] 메뉴 패널과 메인(채팅/기능) 패널 2개로 단순화
         mainContainer.add(createMenuPanel(), "MENU");
-        mainContainer.add(createMainPanel(), "MAIN"); // EXIT + NAV 통합
+        mainContainer.add(createMainPanel(), "MAIN");
 
-        add(mainContainer); // 프레임에 장착
-
-        // 처음에는 메뉴 화면을 보여줌
+        add(mainContainer);
         cardLayout.show(mainContainer, "MENU");
 
         setVisible(true);
     }
 
-    // [화면 1] 메인 메뉴 패널 생성
+    // [화면 1] 메인 메뉴
     private JPanel createMenuPanel() {
         JPanel panel = new JPanel(new GridLayout(3, 1, 10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
 
         JLabel titleLabel = new JLabel("Smart Parking Service", SwingConstants.CENTER);
-        titleLabel.setFont(new Font("맑은 고딕", Font.BOLD, 20));
+        titleLabel.setFont(new Font("맑은 고딕", Font.BOLD, 24));
 
         JButton btnStart = new JButton("주차 시스템 접속");
         btnStart.setFont(new Font("맑은 고딕", Font.BOLD, 16));
+        btnStart.setBackground(new Color(230, 240, 255));
 
         btnStart.addActionListener(e -> {
-            cardLayout.show(mainContainer, "MAIN"); // 메인 화면으로 이동
+            cardLayout.show(mainContainer, "MAIN");
+            // 접속 시 안내 멘트 출력 (처음 한 번만)
+            if(chatArea.getText().isEmpty()) {
+                chatArea.append("[System] 주차 관제 시스템에 접속했습니다.\n");
+                chatArea.append("[System] '길 안내 요청'을 누르거나 채팅을 입력하세요.\n");
+            }
         });
 
         panel.add(titleLabel);
@@ -81,38 +85,38 @@ public class UserApp extends JFrame {
         return panel;
     }
 
-    // [화면 2] 길안내,출차,결제 패널
+    // [화면 2] 통합 메인 패널 (길안내 + 채팅 + 결제)
     private JPanel createMainPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
-        // 1. 상단: 기능 버튼들
-        JPanel topPanel = new JPanel(new FlowLayout());
+        // 1. 상단 버튼
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton btnNav = new JButton("🗺️ 길 안내 요청");
         JButton btnExit = new JButton("🚪 메뉴로");
+        btnNav.setBackground(new Color(200, 255, 200));
 
-        btnNav.setBackground(new Color(200, 230, 255)); // 연한 파랑
-
-        // 길 안내 요청 버튼: 화면 전환 없이 바로 요청 전송
         btnNav.addActionListener(e -> {
             if (os != null) {
+                chatArea.setText(""); // 화면 정리
                 chatArea.append("[Me] 길 안내를 요청합니다.\n");
-                os.println(Protocol.REQ_NAV);
+                os.println(Protocol.REQ_NAV); // 서버로 요청 전송
             }
         });
 
         btnExit.addActionListener(e -> cardLayout.show(mainContainer, "MENU"));
 
-        topPanel.add(btnNav);
         topPanel.add(btnExit);
+        topPanel.add(btnNav);
         panel.add(topPanel, BorderLayout.NORTH);
 
-        // 2. 중앙: 통합 로그창 (팀원 화면 스타일)
+        // 2. 중앙 로그창
         chatArea = new JTextArea();
         chatArea.setEditable(false);
-        chatArea.setFont(new Font("Monospaced", Font.PLAIN, 14)); // 고정폭 글꼴 추천
+        chatArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        chatArea.setLineWrap(true);
         panel.add(new JScrollPane(chatArea), BorderLayout.CENTER);
 
-        // 3. 하단: 입력창 (신고/채팅/도움)
+        // 3. 하단 입력창
         JPanel bottomPanel = new JPanel(new BorderLayout());
         inputField = new JTextField();
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
@@ -137,37 +141,32 @@ public class UserApp extends JFrame {
         btnSend.addActionListener(sendAction);
 
         btnHelp.addActionListener(e -> {
-            os.println("/help"); // 서버로 명령어 전송
-            chatArea.append("[Me] (🆘긴급) 관리자에게 도움을 요청했습니다.\n");
+            os.println("/help");
+            chatArea.append("[Me] (🆘긴급) 도움 요청 전송\n");
         });
 
         btnReport.addActionListener(e -> {
-            String input = inputField.getText();
-            if(input.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "신고 내용을 입력하세요.");
-                return;
+            String input = JOptionPane.showInputDialog(this, "신고 내용을 입력하세요:");
+            if(input != null && !input.trim().isEmpty()) {
+                os.println("/report " + input);
+                chatArea.append("[Me] (🚨신고) " + input + "\n");
             }
-            os.println("/report " + input);
-            chatArea.append("[Me] (🚨신고) " + input + "\n");
-            inputField.setText("");
         });
 
         return panel;
     }
 
-    // 네트워크 및 기능 로직
     private void connectToServer() {
-        String host = "10.101.17.72";
+        // ★ 본인의 서버 IP로 꼭 변경하세요!
+        String host = "10.101.48.65";
         int port = 8888;
 
         try {
             socket = new Socket(host, port);
-            os = new PrintStream(socket.getOutputStream());
+            // 한글 깨짐 방지 & AutoFlush 설정
+            os = new PrintStream(socket.getOutputStream(), true, "UTF-8");
 
-            // 로그인 패킷 전송
             os.println(Protocol.LOGIN_USER + myCarNum);
-
-            // 수신 스레드 시작
             new ReceiveThread(socket).start();
 
         } catch (IOException e) {
@@ -176,18 +175,70 @@ public class UserApp extends JFrame {
         }
     }
 
+    // ★ [핵심] 메시지 전송 로직 (결제 인터셉트 기능 포함)
     private void sendMessage() {
         String input = inputField.getText();
         if (input.isEmpty()) return;
 
+        // 1. [결제 대기 상태]일 때 -> 로컬에서 처리 (서버로 안 보냄)
+        if (isWaitingForPayment) {
+            chatArea.append("[Me] " + input + "\n");
+
+            if (input.equalsIgnoreCase("y") || input.equals("예")) {
+                processPaymentPopup(); // 팝업 띄우기
+            } else {
+                // 결제 취소 시 -> 안내 메시지 후 메뉴로 이동
+                chatArea.append("--------------------------------\n");
+                chatArea.append("[System] 결제를 보류했습니다.\n");
+                chatArea.append("         메뉴 화면으로 이동합니다.\n");
+                chatArea.append("--------------------------------\n");
+
+                isWaitingForPayment = false;
+                inputField.setText("");
+
+                // ★ 홈 화면으로 강제 이동
+                cardLayout.show(mainContainer, "MENU");
+                return;
+            }
+
+            isWaitingForPayment = false;
+            inputField.setText("");
+            return;
+        }
+
+        // 2. [일반 상태] -> 서버로 전송 (길 안내 답변 포함)
         chatArea.append("[Me] " + input + "\n");
         os.println(input);
         inputField.setText("");
+
         // 자동 스크롤
         chatArea.setCaretPosition(chatArea.getDocument().getLength());
     }
 
-    // 내부 클래스: 수신 스레드
+    // 결제 팝업창
+    private void processPaymentPopup() {
+        int choice = JOptionPane.showOptionDialog(
+                UserApp.this,
+                "결제 방식을 선택해주세요.\n(총 금액: 12,000원)",
+                "결제 수단 선택",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                new Object[]{"💳 카드 결제", "💵 현장 결제"},
+                "💳 카드 결제"
+        );
+
+        if (choice == JOptionPane.YES_OPTION) {
+            chatArea.append("[System] 카드 결제가 완료되었습니다. 안녕히 가세요!\n");
+            JOptionPane.showMessageDialog(UserApp.this, "결제 완료! 차단기가 열렸습니다.");
+        } else {
+            chatArea.append("[System] 현장 결제/기타 수단을 선택하셨습니다.\n");
+            JOptionPane.showMessageDialog(UserApp.this, "출구 정산기를 이용해주세요.");
+        }
+        isWaitingForPayment = false;
+    }
+
+    // 수신 스레드
     class ReceiveThread extends Thread {
         private BufferedReader reader;
 
@@ -204,38 +255,49 @@ public class UserApp extends JFrame {
                 while ((line = reader.readLine()) != null) {
                     String msg = line;
                     SwingUtilities.invokeLater(() -> {
-                        // 1. [좌표 숨김] 팀원 화면처럼 좌표는 안 보이게 처리
+
+                        // 1. 좌표 데이터 숨김 (원할 경우 주석 해제하여 확인 가능)
                         if (msg.startsWith(Protocol.NAV_COORD)) {
-                            // (나중에 지도 기능을 쓴다면 여기서 coords 파싱해서 사용)
-                            return; // ★ 화면에 출력하지 않고 종료
+                            // System.out.println("좌표 수신: " + msg);
+                            return;
                         }
 
-                        // 2. [종료 신호]
+                        // 2. 길 안내 종료
                         if (msg.equals(Protocol.NAV_END)) {
-                            // 안내 종료 메시지는 띄워줌 (선택 사항)
-                            // chatArea.append("--- 안내가 종료되었습니다 ---\n");
+                            chatArea.append("🏁 목적지에 도착했습니다.\n");
+                            JOptionPane.showMessageDialog(UserApp.this, "안내가 종료되었습니다.");
                             return;
                         }
 
-                        // 3. [결제 알림]
+                        // 3. ★ [결제 요청 수신] -> 채팅창에 상세 내역 출력
                         if (msg.equals(Protocol.MSG_PAYMENT)) {
-                            // 팝업은 띄우되, 로그에는 따로 안 남겨도 됨 (팀원 화면 참고)
-                            int choice = JOptionPane.showOptionDialog(UserApp.this,
-                                    "차량이 인식되었습니다. 자동 결제 하시겠습니까?",
-                                    "결제", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE,
-                                    null, new Object[]{"예", "아니오"}, "예");
-                            // (결제 로직 생략...)
+                            chatArea.append("\n================================\n");
+                            chatArea.append("📢 [출차 알림] 차량이 인식되었습니다.\n");
+                            chatArea.append(" - 차량 번호: " + myCarNum + "\n");
+                            chatArea.append(" - 총 이용 시간: 3시간 15분\n");
+                            chatArea.append(" - 결제 예정 금액: 12,000원\n");
+                            chatArea.append("--------------------------------\n");
+                            chatArea.append("결제하시겠습니까? (y/n)\n");
+                            chatArea.append("================================\n");
+
+                            // 스크롤 맨 아래로
+                            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+
+                            // ★ 상태 변경: 다음 입력은 결제 응답으로 처리
+                            isWaitingForPayment = true;
                             return;
                         }
 
-                        // 4. [모든 메시지 출력] 위에서 걸러지지 않은 텍스트(안내 멘트 등)는 채팅창에 표시
-                        if (chatArea != null && !msg.startsWith(Protocol.LOGIN_USER)) {
+                        // 4. 그 외 모든 서버 메시지 (길안내 멘트, 채팅 등) 출력
+                        if (!msg.startsWith(Protocol.LOGIN_USER)) {
                             chatArea.append(msg + "\n");
                             chatArea.setCaretPosition(chatArea.getDocument().getLength());
                         }
                     });
                 }
-            } catch (IOException e) {}
+            } catch (IOException e) {
+                chatArea.append("[System] 서버와의 연결이 끊어졌습니다.\n");
+            }
         }
     }
 
