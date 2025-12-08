@@ -27,7 +27,7 @@ public class LPRCamera {
     }
 
     public static void main(String[] args) {
-        String host = "10.101.17.50";
+        String host = "10.101.17.72";
         int port = 8888;
         Scanner sc = new Scanner(System.in);
 

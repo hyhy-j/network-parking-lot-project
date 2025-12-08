@@ -68,6 +68,22 @@ public class ClientHandler extends Thread {
 
                 line = line.trim();
 
+                // [길 안내] 관리자 신고 기능
+                if (line.startsWith("/report")) {
+                    String content = line.replace("/report", "").trim();
+                    os.println("[Server] 신고가 접수되었습니다. (내용: " + content + ")");
+                    System.out.println("[Report] From " + carNum + ": " + content);
+
+                    // (선택사항) 접속한 모든 사람에게 알림을 띄우고 싶다면:
+                    // broadcast("[공지] " + carNum + "님이 신고를 접수했습니다.");
+                }
+
+                // [길 안내] 긴급 도움 요청
+                else if (line.startsWith("/help")) {
+                    os.println("[Server] 🚨 긴급 요청 확인! 보안요원이 출동합니다.");
+                    System.out.println("[Emergency] Help requested by " + carNum);
+                }
+
                 // [LPR 로직] 차량 인식 메시지가 온 경우 ("DETECT:1234")
                 if ("LPR".equals(this.role) && line.startsWith(Protocol.DETECT_CAR)) {
                     String targetCarNum = line.split(":")[1];
@@ -135,41 +151,46 @@ public class ClientHandler extends Thread {
     // [길 안내] 자율주행 시뮬레이션 로직
     private void simulateNavigation() {
         try {
-            // 1. 목적지 설정 (팀원 코드의 "교수/학생" 로직을 단순화하여 적용)
-            // 차량 번호가 짝수면 '교수(본관)', 홀수면 '학생(명신관)'으로 가정해봅시다.
-            String targetName;
-            int destX, destY;
+            // 1. ParkingManager를 통해 자리 배정
+            // (차 번호 끝자리가 짝수면 교수 구역, 홀수면 학생 구역으로 가정)
+            char lastChar = (carNum != null) ? carNum.charAt(carNum.length() - 1) : '1';
+            boolean isProfessor = (lastChar - '0') % 2 == 0;
 
-            // 간단히 차번호 끝자리를 이용해 분류
-            char lastChar = carNum.charAt(carNum.length() - 1);
-            if ((lastChar - '0') % 2 == 0) {
-                targetName = "본관(교수 연구동)";
-                destX = 50; destY = 100;
-            } else {
-                targetName = "명신관(강의동)";
-                destX = -30; destY = 40;
-            }
+            String targetName = isProfessor ? "본관(교수 연구동)" : "명신관(강의동)";
+            int destX = isProfessor ? 50 : -30;
+            int destY = isProfessor ? 100 : 40;
 
-            os.println("[Server] " + targetName + "으로 안내를 시작합니다. (IoT 센서 연동 중...)");
-            Thread.sleep(1000); // 준비 시간
+            os.println("[System] " + targetName + "으로 안내를 시작합니다.");
+            Thread.sleep(1000);
 
-            // 2. 주행 시뮬레이션 (팀원 코드의 for 루프 활용)
+            // 2. 출발 멘트 (팀원 코드 반영)
+            os.println("🚗 주차장 입구에서 출발합니다.");
+            os.println("⏱️ 예상 소요 시간: 10초");
+            Thread.sleep(1500);
+
+            // 3. 주행 시뮬레이션 (좌표 + 멘트 전송)
             for (int i = 1; i <= 5; i++) {
-                // 1.5초 딜레이 (이동하는 느낌)
-                Thread.sleep(1500);
+                // 팀원의 상세 멘트 로직 이식
+                if (i == 2) {
+                    if (isProfessor) os.println("➡️ 20m 앞 본관 방향으로 우회전하세요.");
+                    else os.println("⬅️ 15m 앞 명신관 방향으로 좌회전하세요.");
+                }
+                if (i == 4) {
+                    os.println("⚠️ 곧 주차 구역입니다. 속도를 줄이세요.");
+                }
 
-                // 현재 위치 계산 (선형 보간)
+                Thread.sleep(1500); // 이동 시간
+
+                // 좌표 계산 및 전송 (UserApp 화면 표시용)
                 int curX = (destX / 5) * i;
                 int curY = (destY / 5) * i;
-
-                // 클라이언트에게 좌표 전송 (프로토콜: "NAV:COORD:X,Y")
                 os.println(Protocol.NAV_COORD + curX + "," + curY);
             }
 
-            // 3. 도착 알림
+            // 4. 도착 처리
             Thread.sleep(1000);
-            os.println("[Server] 목적지 도착: " + targetName);
-            os.println(Protocol.NAV_END); // 종료 신호
+            os.println("🎉 목적지 도착! 안전하게 주차되었습니다.");
+            os.println(Protocol.NAV_END);
 
         } catch (InterruptedException e) {
             System.out.println("[Error] Navigation interrupted.");

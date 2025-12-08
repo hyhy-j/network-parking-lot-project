@@ -181,7 +181,7 @@ public class UserApp extends JFrame {
     // 네트워크 및 기능 로직
 
     private void connectToServer() {
-        String host = "10.101.17.50";
+        String host = "10.101.17.72";
         int port = 8888;
 
         try {
