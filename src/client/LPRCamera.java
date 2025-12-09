@@ -26,7 +26,7 @@ public class LPRCamera {
     }
 
     public static void main(String[] args) {
-        String host = "172.20.62.10"; // 서버 IP 확인
+        String host = "192.168.35.247"; // 서버 IP 확인
         int port = 8888;
         Scanner sc = new Scanner(System.in);
 

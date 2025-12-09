@@ -8,6 +8,7 @@ public class ClientHandler extends Thread {
     private String role = null;
     private String userType = "VISITOR";
     private String carNum = null;
+    private boolean inChatMode = false;
 
     private BufferedReader reader = null;
     private PrintStream os = null;
@@ -28,6 +29,19 @@ public class ClientHandler extends Thread {
             if (num >= 2000 && num <= 2999) return "STUDENT";
         } catch (NumberFormatException e) {}
         return "VISITOR";
+    }
+
+    //  메시지 전체 전송 (브로드캐스트)
+    private void broadcast(String message) {
+        synchronized (this) {
+            for (int i = 0; i < maxClientsCount; i++) {
+                ClientHandler t = threads[i];
+                // 유효한 클라이언트이고, 나(this) 자신이 아니며, USER 역할인 사람에게만 전송
+                if (t != null && t != this && "USER".equals(t.role)) {
+                    t.os.println(message);
+                }
+            }
+        }
     }
 
     public void run() {
@@ -100,21 +114,74 @@ public class ClientHandler extends Thread {
                 }
 
                 // ----------------------------------------------------
-                // [기능 B] 유저 명령 처리
+                // [기능 B] 유저 명령 처리 (채팅 기능 통합)
                 // ----------------------------------------------------
                 else if ("USER".equals(this.role)) {
-                    if (line.equals(Protocol.REQ_NAV)) {
-                        System.out.println("[Nav] Navigation requested by " + this.carNum);
-                        new Thread(this::simulateNavigation).start();
+
+                    // [통합 1] 채팅 모드 진입/이탈 로직
+                    if (line.equals("채팅방 입장")) {
+                        inChatMode = true;
+                        os.println("========================================");
+                        os.println("💬 [System] 주차장 커뮤니티 채팅방에 입장했습니다.");
+                        os.println("   (나가시려면 '채팅방 퇴장'을 입력하세요)");
+                        os.println("========================================");
+                        broadcast("📢 [" + carNum + "] 님이 채팅방에 입장하셨습니다.");
+                        continue;
                     }
-                    else if (line.startsWith("/report")) {
-                        String content = line.replace("/report", "").trim();
-                        os.println("[System] 신고가 접수되었습니다.");
-                        System.out.println("[Report] " + this.carNum + ": " + content);
+
+                    if (line.equals("채팅방 퇴장")) {
+                        if (inChatMode) {
+                            inChatMode = false;
+                            os.println("[System] 채팅방에서 퇴장하여 일반 모드로 전환됩니다.");
+                            broadcast("📢 [" + carNum + "] 님이 채팅방을 나갔습니다.");
+                        } else {
+                            os.println("[System] 현재 채팅방에 있지 않습니다.");
+                        }
+                        continue;
                     }
-                    else if (line.startsWith("/help")) {
-                        os.println("[System] 보안팀 호출 완료.");
-                        System.out.println("[Emergency] " + this.carNum + " help requested.");
+
+                    // [통합 2] 채팅 모드일 때 동작 (팀원 코드 기능 반영)
+                    if (inChatMode) {
+                        // 1) 도움 요청 (/help)
+                        if (line.startsWith("/help")) {
+                            os.println("🆘 긴급 요청이 전송되었습니다. 관리자가 출동합니다.");
+                            broadcast("🚨 [긴급] 차번 " + carNum + " 님이 도움을 요청했습니다!");
+                        }
+                        // 2) 신고 (/report)
+                        else if (line.startsWith("/report")) {
+                            String content = line.replace("/report", "").trim();
+                            os.println("✅ 신고가 접수되었습니다.");
+                            // 관리자 혹은 전체에게 알림 (익명성 보장을 위해 차번은 가리거나 표시 선택)
+                            broadcast("👮 [신고 접수] " + content);
+                        }
+                        // 3) 일반 대화
+                        else {
+                            // 내 화면엔 이미 찍혔으므로, 다른 사람들에게만 전송
+                            // 팀원 코드 포맷: <이름> 메시지
+                            broadcast("<" + carNum + "> " + line);
+                        }
+                    }
+
+                    // [통합 3] 채팅 모드가 아닐 때 (기존 주차 시스템 동작)
+                    else {
+                        if (line.equals(Protocol.REQ_NAV)) {
+                            System.out.println("[Nav] Navigation requested by " + this.carNum);
+                            new Thread(this::simulateNavigation).start();
+                        }
+                        // 채팅방 밖에서도 긴급/신고 기능은 작동하도록 유지 (선택 사항)
+                        else if (line.startsWith("/report")) {
+                            String content = line.replace("/report", "").trim();
+                            os.println("[System] 신고가 접수되었습니다.");
+                            System.out.println("[Report] " + this.carNum + ": " + content);
+                        }
+                        else if (line.startsWith("/help")) {
+                            os.println("[System] 보안팀 호출 완료.");
+                            System.out.println("[Emergency] " + this.carNum + " help requested.");
+                        }
+                        else {
+                            // 그 외 알 수 없는 명령어 처리
+                            os.println("[System] 알 수 없는 명령입니다. 채팅을 하려면 '채팅방 입장'을 입력하세요.");
+                        }
                     }
                 }
             }

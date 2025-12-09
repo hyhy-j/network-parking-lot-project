@@ -155,7 +155,7 @@ public class UserApp extends JFrame {
     }
 
     private void connectToServer() {
-        String host = "172.20.62.10";
+        String host = "192.168.35.247";
         int port = 8888;
 
         try {
