@@ -38,7 +38,11 @@ public class ClientHandler extends Thread {
                 ClientHandler t = threads[i];
                 // 유효한 클라이언트이고, 나(this) 자신이 아니며, USER 역할인 사람에게만 전송
                 if (t != null && t != this && "USER".equals(t.role)) {
-                    t.os.println(message);
+
+                    // 받는 사람(t)도 '채팅 모드' 상태여야만 메시지를 보냄
+                    if (t.inChatMode) {
+                        t.os.println(message);
+                    }
                 }
             }
         }

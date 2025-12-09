@@ -37,8 +37,6 @@ public class UserApp extends JFrame {
             System.exit(0);
         }
 
-        connectToServer();
-
         cardLayout = new CardLayout();
         mainContainer = new JPanel(cardLayout);
 
@@ -49,6 +47,8 @@ public class UserApp extends JFrame {
         cardLayout.show(mainContainer, "MENU");
 
         setVisible(true);
+
+        connectToServer();
     }
 
     private JPanel createMenuPanel() {
@@ -64,10 +64,6 @@ public class UserApp extends JFrame {
 
         btnStart.addActionListener(e -> {
             cardLayout.show(mainContainer, "MAIN");
-            if(chatArea.getText().isEmpty()) {
-                chatArea.append("[System] 주차 관제 시스템에 접속했습니다.\n");
-                chatArea.append("[System] 입차를 대기 중입니다...\n");
-            }
         });
 
         panel.add(titleLabel);
